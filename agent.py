@@ -2,6 +2,8 @@ import os
 from langchain.agents import create_agent   
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents.structured_output import ToolStrategy
+from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
 import yfinance as yf
 from langchain.tools import tool
 from pydantic import BaseModel
@@ -27,16 +29,32 @@ def fetch_financial_data(ticker: str) -> str:
     """
     stock = yf.Ticker(ticker)
     return stock.info
+
+# Create history
+history = InMemoryChatMessageHistory()
+
 # Create an agent
 agent = create_agent(
     model=model,
     system_prompt=get_system_prompt(),
     tools=[fetch_financial_data]
-)
+),
+
+# Make runnable agent with history
+agent_with_history = RunnableWithMessageHistory(
+      agent,
+      lambda session_id: history,
+      input_messages_key="input",
+      history_messages_key="history",
+  )
 
 # Function to make query to agent
-def invoke_query(user_input: str):
-    response = agent.invoke({"messages":{"role": "user", "content": user_input}})
-    return response
-
-print(invoke_query("What investment strategy would you recommend for a 30-year-old with moderate risk tolerance and a 20-year time horizon?"))
+while True:
+    text = input("> ")
+    if text.lower() in {"exit", "quit"}:
+        break
+    result = agent_with_history.invoke(
+        {"input": text},
+        config={"configurable": {"session_id": "local"}}
+    )
+    print(result)
