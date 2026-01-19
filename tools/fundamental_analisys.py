@@ -27,3 +27,5 @@ def fetch_yahoo_analyst_forecast(ticker: str) -> dict:
         print("No such ticker or company available in API")
         print(e)
 
+
+
