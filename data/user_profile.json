@@ -1,0 +1,16 @@
+{
+    "risk_tolerance": 15.0,
+    "time_horizon": 20.0,
+    "investment_goal": "generate income for an apartment purchase",
+    "profit_target": "25%",
+    "current_holdings": [
+        {
+            "security_type": "Index Fund",
+            "ticker": "SPY",
+            "quantity": 20.0,
+            "purchase_price": 50.0,
+            "total_value": null,
+            "notes": null
+        }
+    ]
+}
