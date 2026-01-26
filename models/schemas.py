@@ -11,6 +11,12 @@ class SecurityType(str, Enum):
     MUTUAL_FUND = "Mutual Fund"
     INDEX_FUND = "Index Fund"
 
+class StatusType(str, Enum):
+    LOADED = "Loaded"
+    CHECKED = "Checked"
+    SAVED = "Saved"
+    ERROR = "Error"
+
 
 # Data Models
 class Holdings(BaseModel):
@@ -46,16 +52,30 @@ class Holdings(BaseModel):
             raise ValueError("Provide at least one of: total_value, quantity, or purchase_price")
         return self
 
+# Main model output (Final result)
 class AnalysisResult(BaseModel):
-    recommended_action: str = Field(..., description="The recommended action for the user based on the analysis. Each point as an action")
-    reasoning: str = Field(..., description="The reasoning behind the recommended action")
-    supporting_data: list[str] = Field(..., description="Supporting data or evidence for the recommended action")
+    recommended_action: str = Field(..., description="The recommended action for the user based on the analysis. Each point as an action. Short and concise points")
+    reasoning: str = Field(..., description="The reasoning behind the recommended action. No longer than 100 words")
+    supporting_data: list[str] = Field(..., description="Supporting data or evidence for the recommended action. No longer that 100 words")
 
+# User profile for preferences
 class UserProfile(BaseModel):
     risk_tolerance: float = Field(..., gt=0, lt=30.0, description="User's risk tolerance level. How much percent user can afford to lose per year")
     time_horizon: float = Field(..., gt=0, lt=50.0, description="Investment time horizon in years")
     investment_goal: str = Field(..., description="What does the user want to achieve with their investments")
     profit_target: str = Field(default="Maximum profit a user can achieve", description="The profit target the user aims for with their investments")
     current_holdings: list[Holdings] | None = Field(default=None, description="List of current assets owned by user, or None if no holdings")
-    
+
+# Final output of the Fundamental Analyst Sub-Agent
+class FundamentalAnalysis(BaseModel):
+    score: int = Field(..., ge=0, le=10, description="Overall fundamental analysis score from 0 (poor) to 10 (excellent)")
+    reasoning: str = Field(..., description="Detailed reasoning behind the assigned score. No more than 150 words.")
+    horizon: str = Field(..., description="Recommended investment horizon based on fundamentals (e.g., in number of quarters)")
+    key_strengths: list[str] = Field(..., description="2-4 key fundamental strengths identified from the analysis")
+    key_risks: list[str] = Field(..., description="2-4 key fundamental risks or concerns identified from the analysis")
+
+# Intermediary output of the User Manager Sub-Agent
+class ProfileStatus(BaseModel):
+    status: StatusType = Field(..., description="Status of the profile operation")
+    changes_content: str | None = Field(default=None, description="Details about changes made or errors encountered")
 

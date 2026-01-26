@@ -1,93 +1,74 @@
 import os
 import json
+from langchain.tools import tool
 from langchain.agents import create_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
-from prompt import get_system_prompt
+from models.schemas import FundamentalAnalysis, ProfileStatus
 from dotenv import load_dotenv
-from tools.profile import check_profile_exists, load_profile, save_profile
-from tools.fundamental_analisys import fetch_yahoo_analyst_forecast
+from tools.profile_management import check_profile_exists, load_profile, save_profile
+from tools.fundamental_analysis import fetch_yahoo_analyst_forecast, fetch_fundamental_data
+from conversation_formatter.formatter import print_turn_history, get_response_text
+from prompt import get_orchestrator_prompt, get_fundamental_analyst_prompt, get_profile_manager_prompt
 
 load_dotenv()
 
+# -----------------------------
+# Fundamental Analyst Sub-Agent
+# -----------------------------
 
-def trim_text(text: str, max_words: int = 30) -> str:
-    """Trim text to max_words, adding ellipsis if truncated."""
-    if not text:
-        return ""
-    words = str(text).split()
-    if len(words) <= max_words:
-        return str(text)
-    return " ".join(words[:max_words]) + "..."
+# Model instantiaion
+fundamental_analyst_model = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
 
+# Agent creation
+fundemantetal_analyst_agent = create_agent(
+    model=fundamental_analyst_model,
+    system_prompt=get_fundamental_analyst_prompt(),
+    tools=[fetch_fundamental_data, fetch_yahoo_analyst_forecast],
+    response_format = FundamentalAnalysis
+)
 
-def print_turn_history(result: dict, turn_number: int) -> None:
-    """Print a beautifully formatted history of the agent's turn."""
-    messages = result.get("messages", [])
+# Wrap agent as a tool
+@tool("fundamental_analyst", description="Analyzes fundamental data of a stock and provides a score from 0-10 with reasoning.")
+def fundamental_analyst_sub_agent(query: str) -> str:
+    """Tool that uses the Fundamental Analyst sub-agent to analyze stocks."""
+    result = fundemantetal_analyst_agent.invoke({"messages": [{"role": "user", "content": query}]})
+    return get_response_text(result)
 
-    print(f"\n{'='*60}")
-    print(f"  TURN {turn_number} - EXECUTION TRACE")
-    print(f"{'='*60}")
+# -----------------------------
+# User Profile Manager Sub-Agent
+# -----------------------------
 
-    step = 1
-    for msg in messages:
-        msg_type = type(msg).__name__
+# Model instatiation
+user_profile_model = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
 
-        # User message
-        if msg_type == "HumanMessage":
-            print(f"\n[Step {step}] 👤 USER INPUT")
-            print(f"  └─ {trim_text(msg.content)}")
-            step += 1
+# Agent creation
+user_profile_agent = create_agent(
+    model=user_profile_model,
+    system_prompt=get_profile_manager_prompt(),
+    tools=[check_profile_exists, load_profile, save_profile],
+    response_format=ProfileStatus
+)
 
-        # AI message (may contain tool calls)
-        elif msg_type == "AIMessage":
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                print(f"\n[Step {step}] 🤖 AI TOOL CALLS")
-                for call in msg.tool_calls:
-                    tool_name = call.get("name", "unknown")
-                    tool_args = call.get("args", {})
-                    args_str = json.dumps(tool_args, indent=2) if tool_args else "(no args)"
-                    print(f"  ├─ Tool: {tool_name}")
-                    print(f"  └─ Args: {trim_text(args_str)}")
-                step += 1
-            elif msg.content:
-                print(f"\n[Step {step}] 🤖 AI RESPONSE")
-                print(f"  └─ {trim_text(msg.content)}")
-                step += 1
+@tool("profile_manager", description="Manages user profiles: checks existence, loads, saves, and updates profiles.")
+def user_profile_sub_agent(query: str) -> str:
+    """Tool that uses the User Profile Manager sub-agent to handle user profiles."""
+    result = user_profile_agent.invoke({"messages": [{"role": "user", "content": query}]})
+    return get_response_text(result)
 
-        # Tool response
-        elif msg_type == "ToolMessage":
-            tool_name = getattr(msg, "name", "unknown")
-            print(f"\n[Step {step}] 🔧 TOOL RESULT [{tool_name}]")
-            print(f"  └─ {trim_text(msg.content)}")
-            step += 1
+# -----------------------------
+# Main Agent
+# -----------------------------
 
-    print(f"\n{'='*60}\n")
-
-# Instantiate the model
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite")
+# Instantiate the Main Model
+main_model = ChatGoogleGenerativeAI(model="gemini-2.5-pro")
 
 # Create an agent
 agent = create_agent(
-    model=model,
-    system_prompt=get_system_prompt(),
-    tools=[check_profile_exists, 
-           load_profile, 
-           save_profile, 
-           fetch_yahoo_analyst_forecast]
+    model=main_model,
+    system_prompt=get_orchestrator_prompt(),
+    tools=[user_profile_sub_agent, fundamental_analyst_sub_agent]
 )
-# Helper to extract the last AI response text
-def get_response_text(result):
-    """Extract the final AI message content from agent result."""
-    messages = result.get("messages", [])
-    # Find the last AIMessage with content
-    for msg in reversed(messages):
-        if hasattr(msg, "content") and msg.content:
-            return msg.content
-    return "(No response)"
 
-# Structure the conversation details
-def structure_conversation(conversation_history):
-    """Structure the conversation history for the agent."""
 
 # Interactive loop with memory
 print("Investment Agent ready. Type 'exit' to quit.\n")
